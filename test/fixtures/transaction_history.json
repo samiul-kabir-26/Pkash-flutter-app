@@ -1,0 +1,63 @@
+{
+  "success": true,
+  "data": {
+    "transactions": [
+      {
+        "id": 3,
+        "user_id": 4,
+        "agent_id": 5,
+        "sender_id": 4,
+        "recipient_id": null,
+        "initiated_by": 4,
+        "type": "CASH_OUT",
+        "amount": 50,
+        "system_fee_amount": 2.5,
+        "system_fee_rate": 0.05,
+        "agent_commission_amount": 0.5,
+        "agent_commission_rate": 0.01,
+        "currency": "BDT",
+        "description": "Cash out test",
+        "status": "COMPLETED",
+        "idempotency_key": "test-cashout-uuid-1",
+        "sender_wallet_balance_after": 517.5,
+        "recipient_wallet_balance_after": null,
+        "agent_wallet_balance_after": 80.5,
+        "meta": null,
+        "created_at": "2026-10-11T04:19:50.000000Z",
+        "updated_at": "2026-10-11T04:19:50.000000Z"
+      },
+      {
+        "id": 1,
+        "user_id": 4,
+        "agent_id": null,
+        "sender_id": null,
+        "recipient_id": 4,
+        "initiated_by": 4,
+        "type": "TOP_UP",
+        "amount": 500,
+        "system_fee_amount": 0,
+        "system_fee_rate": 0,
+        "agent_commission_amount": 0,
+        "agent_commission_rate": 0,
+        "currency": "BDT",
+        "description": "Test topup",
+        "status": "COMPLETED",
+        "idempotency_key": "test-topup-uuid-1",
+        "sender_wallet_balance_after": null,
+        "recipient_wallet_balance_after": 550,
+        "agent_wallet_balance_after": null,
+        "meta": null,
+        "created_at": "2026-10-11T04:17:31.000000Z",
+        "updated_at": "2026-10-11T04:17:31.000000Z"
+      }
+    ],
+    "pagination": {
+      "total": 2,
+      "per_page": 15,
+      "current_page": 1,
+      "last_page": 1,
+      "from": 1,
+      "to": 2
+    }
+  }
+}

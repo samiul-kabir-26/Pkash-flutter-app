@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "user": {
+      "id": 4,
+      "name": "Flutter Test User",
+      "phone_number": "01711112233",
+      "roles": ["USER"],
+      "is_verified": false,
+      "is_active": "ACTIVE"
+    },
+    "token": "1|56t1aSMI73cCxIXrmY0LIRvEuqT4knesppvcklXna67ca178",
+    "token_type": "Bearer",
+    "abilities": ["user"]
+  }
+}

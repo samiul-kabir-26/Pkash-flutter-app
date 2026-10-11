@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": 4,
+      "name": "Flutter Test User",
+      "email": null,
+      "phone_number": "01711112233",
+      "address": "Dhaka, Bangladesh",
+      "roles": ["USER"],
+      "is_active": "ACTIVE",
+      "is_verified": false,
+      "wallet": {
+        "id": 1,
+        "user_id": 4,
+        "balance": "550.00",
+        "currency": "BDT",
+        "is_blocked": false,
+        "blocked_by": null,
+        "blocked_at": null,
+        "created_at": "2026-10-11T04:17:03.000000Z",
+        "updated_at": "2026-10-11T04:17:31.000000Z"
+      },
+      "caps": {
+        "id": 1,
+        "user_id": 4,
+        "daily_cap": "10000.00",
+        "monthly_cap": "50000.00",
+        "daily_used": "500.00",
+        "monthly_used": "500.00",
+        "created_at": "2026-10-11T04:17:03.000000Z",
+        "updated_at": "2026-10-11T04:17:31.000000Z"
+      },
+      "agent_info": null,
+      "created_at": "2026-10-11T04:17:03.000000Z",
+      "updated_at": "2026-10-11T04:17:31.000000Z"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": 5,
+      "name": "Flutter Test Agent",
+      "email": null,
+      "phone_number": "01722223344",
+      "address": null,
+      "roles": ["AGENT"],
+      "is_active": "ACTIVE",
+      "is_verified": false,
+      "wallet": {
+        "id": 2,
+        "user_id": 5,
+        "balance": "50.50",
+        "currency": "BDT",
+        "is_blocked": false,
+        "blocked_by": null,
+        "blocked_at": null,
+        "created_at": "2026-10-11T04:17:51.000000Z",
+        "updated_at": "2026-10-11T04:20:00.000000Z"
+      },
+      "caps": {
+        "id": 2,
+        "user_id": 5,
+        "daily_cap": "10000.00",
+        "monthly_cap": "50000.00",
+        "daily_used": "0.00",
+        "monthly_used": "0.00",
+        "created_at": "2026-10-11T04:17:51.000000Z",
+        "updated_at": "2026-10-11T04:17:51.000000Z"
+      },
+      "agent_info": {
+        "id": 1,
+        "user_id": 5,
+        "status": "APPROVED",
+        "commission_rate": "0.0100",
+        "total_commission": "0.50",
+        "approved_at": "2026-10-11T04:18:28.000000Z",
+        "approved_by": 1,
+        "suspended_at": null,
+        "suspended_by": null,
+        "created_at": "2026-10-11T04:17:51.000000Z",
+        "updated_at": "2026-10-11T04:19:08.000000Z"
+      },
+      "created_at": "2026-10-11T04:17:51.000000Z",
+      "updated_at": "2026-10-11T04:17:51.000000Z"
+    }
+  }
+}
