@@ -34,6 +34,7 @@ _Transaction _$TransactionFromJson(Map<String, dynamic> json) => _Transaction(
   agentWalletBalanceAfter: const NullableDecimalJsonConverter().fromJson(
     json['agent_wallet_balance_after'],
   ),
+  meta: json['meta'] as Map<String, dynamic>?,
   createdAt: json['created_at'] == null
       ? null
       : DateTime.parse(json['created_at'] as String),
@@ -66,5 +67,6 @@ Map<String, dynamic> _$TransactionToJson(_Transaction instance) =>
       'agent_wallet_balance_after': const NullableDecimalJsonConverter().toJson(
         instance.agentWalletBalanceAfter,
       ),
+      'meta': instance.meta,
       'created_at': instance.createdAt?.toIso8601String(),
     };

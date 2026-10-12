@@ -4,10 +4,9 @@ import '../../../core/money/money.dart';
 import '../../../core/widgets/amount_field.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/primary_button.dart';
-import '../../../core/widgets/snackbar_helpers.dart';
 import '../../transactions/data/transaction_repository.dart';
+import '../../transfer/presentation/money_flow_outcome.dart';
 import '../../transfer/presentation/money_movement_controller.dart';
-import '../../transfer/presentation/receipt_screen.dart';
 import '../../wallet/presentation/wallet_providers.dart';
 
 class AgentWithdrawalScreen extends ConsumerStatefulWidget {
@@ -29,16 +28,17 @@ class _AgentWithdrawalScreenState extends ConsumerState<AgentWithdrawalScreen> {
     super.dispose();
   }
 
-  void _onReview() {
+  Future<void> _onReview() async {
     if (!_formKey.currentState!.validate()) return;
 
     final amount = parseMoney(_amountController.text.trim());
     final desc = _descController.text.trim();
 
     final controller = ref.read(moneyMovementControllerProvider.notifier);
-    controller.enterReview();
 
-    ConfirmSheet.show(
+    controller.enterReview(MoneyIntent(type: 'AGENT_WITHDRAWAL', amount: amount, description: desc));
+
+    final confirmed = await ConfirmSheet.show(
       context,
       title: 'Confirm Agent Withdrawal',
       items: [
@@ -47,36 +47,24 @@ class _AgentWithdrawalScreenState extends ConsumerState<AgentWithdrawalScreen> {
         if (desc.isNotEmpty) ConfirmSheetItem(label: 'Note', value: desc),
       ],
       confirmLabel: 'Withdraw Now',
-      onConfirmed: () async {
+      onConfirmed: () {
         final repo = ref.read(transactionRepositoryProvider);
-        await controller.submit((idempotencyKey) {
+        return controller.submit((idempotencyKey) {
           return repo.agentWithdrawal(
             amount: amount,
             idempotencyKey: idempotencyKey,
             description: desc.isNotEmpty ? desc : null,
           );
         });
-
-        final state = ref.read(moneyMovementControllerProvider);
-        if (state.stage == MoneyFlowStage.success && state.transaction != null) {
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => ReceiptScreen(transaction: state.transaction!),
-              ),
-            );
-          }
-        } else if (state.stage == MoneyFlowStage.unknownOutcome) {
-          if (mounted) {
-            showErrorSnackBar(context, state.errorMessage ?? 'Status unknown. Check history.');
-          }
-        } else if (state.stage == MoneyFlowStage.failed) {
-          if (mounted) {
-            showErrorSnackBar(context, state.errorMessage ?? 'Withdrawal failed.');
-          }
-        }
       },
     );
+
+    if (!mounted) return;
+    if (confirmed != true) {
+      controller.backToForm();
+      return;
+    }
+    await showMoneyFlowOutcome(context, ref, historyRoute: '/agent/history', homeRoute: '/agent/home');
   }
 
   @override

@@ -59,30 +59,35 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       if (!mounted) return;
 
       if (role == 'USER') {
-        showSuccessSnackBar(context, 'Account created! You received a ৳50.00 signup bonus.');
+        showSuccessSnackBar(context, 'Welcome — ৳50.00 starting balance');
         context.go('/user/home');
       } else {
+        // The token was already revoked (D16); an agent session only comes from agent login.
         context.go('/agent-pending');
       }
     } on ApiException catch (e) {
       if (!mounted) return;
 
-      if (e.isValidationError) {
+      if (e is NetworkException) {
+        showErrorSnackBar(context, 'No connection. Please try again.');
+      } else if (e.isRateLimited) {
+        showErrorSnackBar(context, 'Too many attempts, try again in a minute.');
+      } else if (e.isServerError) {
+        showErrorSnackBar(context, 'Something went wrong.');
+      } else if (e.isValidationError) {
         if (e.fieldErrors.containsKey('phone_number')) {
           setState(() {
             _phoneServerError = e.fieldErrors['phone_number'];
           });
           _formKey.currentState?.validate();
         } else {
-          showErrorSnackBar(context, e.message);
+          showErrorSnackBar(context, e.fieldErrors.values.firstOrNull ?? e.message);
         }
       } else {
         showErrorSnackBar(context, e.message);
       }
-    } catch (e) {
-      if (mounted) {
-        showErrorSnackBar(context, 'Could not connect to server. Please try again.');
-      }
+    } catch (_) {
+      if (mounted) showErrorSnackBar(context, 'Something went wrong.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

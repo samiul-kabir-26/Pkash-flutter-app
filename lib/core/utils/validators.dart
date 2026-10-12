@@ -42,6 +42,9 @@ class Validators {
     if (value == null || value.trim().isEmpty) {
       return 'Name is required.';
     }
+    if (value.trim().length < 2) {
+      return 'Name must be at least 2 characters.';
+    }
     if (value.trim().length > 255) {
       return 'Name cannot exceed 255 characters.';
     }
@@ -75,6 +78,26 @@ class Validators {
     final parsed = int.tryParse(value.trim());
     if (parsed == null || parsed <= 0) {
       return 'Enter a valid positive integer for $fieldName.';
+    }
+    return null;
+  }
+
+  /// `agent_phone` for cash-in / cash-out: BD phone, and not your own number.
+  static String? validateAgentPhone(String? value, {String? ownPhone}) {
+    final phoneError = validatePhone(value);
+    if (phoneError != null) return phoneError;
+    if (ownPhone != null && ownPhone.isNotEmpty && value!.trim() == ownPhone) {
+      return 'The agent must be a different user.';
+    }
+    return null;
+  }
+
+  /// `recipient_id` for transfers: positive integer, and not your own ID.
+  static String? validateRecipientId(String? value, {int? ownId}) {
+    final idError = validateId(value, fieldName: 'Recipient ID');
+    if (idError != null) return idError;
+    if (ownId != null && int.parse(value!.trim()) == ownId) {
+      return "You can't send money to yourself.";
     }
     return null;
   }

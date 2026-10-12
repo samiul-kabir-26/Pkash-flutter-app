@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../auth/presentation/session_controller.dart';
+import '../domain/qr_payload.dart';
 
 class MyQrScreen extends ConsumerWidget {
   const MyQrScreen({super.key});
@@ -11,13 +12,13 @@ class MyQrScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final session = ref.watch(sessionControllerProvider).value;
 
-    final isAgent = session?.panel == 'agent';
+    final isAgent = session?.panel == Panel.agent;
     final userId = session?.user.id ?? 0;
     final userName = session?.user.name ?? 'User';
     final userPhone = session?.user.phoneNumber ?? '';
 
-    // Standardized payload format (§9.1)
-    final qrData = isAgent ? 'walletms:v1:agent:$userId' : 'walletms:v1:user:$userId';
+    // §9.1: agents are identified by phone (what cash-in/out accept), users by ID.
+    final qrData = isAgent ? buildAgentQr(userPhone) : buildUserQr(userId);
 
     return Scaffold(
       appBar: AppBar(
@@ -64,7 +65,7 @@ class MyQrScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        isAgent ? 'Approved Merchant Agent' : userPhone,
+                        isAgent ? 'Agent' : userPhone,
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey.shade600,
@@ -92,7 +93,7 @@ class MyQrScreen extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          isAgent ? 'Agent ID: #$userId' : 'User ID: #$userId',
+                          isAgent ? 'Agent phone: $userPhone' : 'User ID: #$userId',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,

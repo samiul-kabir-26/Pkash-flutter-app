@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 class ApiException implements Exception {
   final int? statusCode;
   final String message;
@@ -27,4 +29,28 @@ class NetworkException extends ApiException {
   const NetworkException({
     super.message = 'Network connection failed. Please check your internet connection.',
   }) : super(statusCode: null);
+}
+
+/// The one place where a server message is matched (§5.4): a staff member with an
+/// unfinished invite gets this 403 on every wallet/transaction/user route.
+const passwordChangeRequiredMessage = 'You must change your password before proceeding.';
+
+bool isPasswordChangeRequired(ApiException e) =>
+    e.isForbidden && e.message.trim() == passwordChangeRequiredMessage;
+
+/// Dio always throws [DioException]; the ErrorInterceptor stores the typed error in
+/// `DioException.error`. Repositories wrap calls with this so callers can branch on
+/// [ApiException] / [NetworkException] directly.
+Future<T> apiCall<T>(Future<T> Function() request) async {
+  try {
+    return await request();
+  } on DioException catch (e) {
+    final error = e.error;
+    if (error is ApiException) throw error;
+    if (e.response == null) throw const NetworkException();
+    throw ApiException(
+      statusCode: e.response?.statusCode,
+      message: 'An unexpected error occurred.',
+    );
+  }
 }

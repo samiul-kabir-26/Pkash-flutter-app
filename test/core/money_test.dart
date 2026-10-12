@@ -33,5 +33,12 @@ void main() {
       expect(sum, Decimal.parse('0.3'));
       expect(toApiAmount(sum), '0.30');
     });
+
+    test('formatRate turns server rates into percentages', () {
+      expect(formatRate('0.0100'), '1%');
+      expect(formatRate(0.05), '5%');
+      expect(formatRate('0.0125'), '1.25%');
+      expect(formatRate(0.1), '10%');
+    });
   });
 }

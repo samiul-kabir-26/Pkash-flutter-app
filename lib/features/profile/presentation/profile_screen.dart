@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:local_auth/local_auth.dart';
+import '../../../core/money/money.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_provider.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/primary_button.dart';
@@ -74,9 +76,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _handleSaveProfile(int userId) async {
-    setState(() => _isSaving = true);
     final name = _nameController.text.trim();
     final address = _addressController.text.trim();
+    final nameError = Validators.validateName(name);
+    if (nameError != null) {
+      showErrorSnackBar(context, nameError);
+      return;
+    }
+    setState(() => _isSaving = true);
 
     try {
       final repo = ref.read(profileRepositoryProvider);
@@ -86,8 +93,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         showSuccessSnackBar(context, 'Profile updated successfully.');
         setState(() => _isEditing = false);
       }
-    } catch (e) {
-      if (mounted) showErrorSnackBar(context, 'Failed to update profile: $e');
+    } on ApiException catch (e) {
+      if (mounted) {
+        showErrorSnackBar(
+          context,
+          e.isServerError ? 'Something went wrong.' : (e.fieldErrors.values.firstOrNull ?? e.message),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -112,6 +124,34 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               router.go('/login');
             },
             child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// D1: one session at a time. Switching logs out and opens the other login, prefilled.
+  void _confirmSwitchPanel() {
+    final target = widget.isAgent ? 'Customer' : 'Agent';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Switch to $target panel'),
+        content: Text(
+          'You will be signed out and asked for your PIN on the $target login. '
+          'Each panel has its own wallet and history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(sessionControllerProvider.notifier).switchPanel();
+            },
+            child: const Text('Switch'),
           ),
         ],
       ),
@@ -250,6 +290,38 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   const SizedBox(height: 20),
                 ],
 
+                if (widget.isAgent && profile.agentInfo != null) ...[
+                  Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.percent, color: Colors.teal),
+                          title: const Text('Commission rate'),
+                          trailing: Text(
+                            profile.agentInfo!.commissionRate != null
+                                ? formatRate(profile.agentInfo!.rate)
+                                : '—',
+                          ),
+                        ),
+                        if (profile.agentInfo!.approvedAt != null) ...[
+                          const Divider(height: 1),
+                          ListTile(
+                            leading: const Icon(Icons.verified_outlined, color: Colors.teal),
+                            title: const Text('Approved on'),
+                            trailing: Text(
+                              MaterialLocalizations.of(context)
+                                  .formatMediumDate(profile.agentInfo!.approvedAt!.toLocal()),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+
                 // Action Tiles Card
                 Card(
                   elevation: 0,
@@ -274,11 +346,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.lock_reset, color: Colors.orange),
-                        title: const Text('Forgot / Reset PIN'),
-                        subtitle: const Text('Customer Care PIN recovery info'),
+                        title: const Text('Change PIN'),
+                        subtitle: const Text('PIN changes go through customer care'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/forgot-pin'),
                       ),
+                      if (profile.hasRole(widget.isAgent ? 'USER' : 'AGENT')) ...[
+                        const Divider(height: 1),
+                        ListTile(
+                          leading: Icon(
+                            widget.isAgent ? Icons.person_outline : Icons.storefront_outlined,
+                            color: Colors.indigo,
+                          ),
+                          title: Text(
+                            widget.isAgent ? 'Switch to Customer panel' : 'Switch to Agent panel',
+                          ),
+                          subtitle: const Text('Signs out of this panel'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: _confirmSwitchPanel,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -305,7 +392,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('Error loading profile: $err'),
+              Text(err is NetworkException ? 'No connection.' : 'Could not load your profile.'),
               ElevatedButton(
                 onPressed: () => ref.invalidate(userProfileProvider),
                 child: const Text('Retry'),

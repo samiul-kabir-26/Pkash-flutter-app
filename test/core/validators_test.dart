@@ -70,5 +70,26 @@ void main() {
       expect(Validators.validateId('1.5'), isNotNull);
       expect(Validators.validateId('abc'), isNotNull);
     });
+
+    test('validateName requires 2-255 characters', () {
+      expect(Validators.validateName('A'), isNotNull);
+      expect(Validators.validateName('Al'), isNull);
+    });
+
+    test('validateAgentPhone checks the BD format and rejects your own number', () {
+      expect(Validators.validateAgentPhone('01712345678', ownPhone: '01811112222'), isNull);
+      expect(Validators.validateAgentPhone('01212345678', ownPhone: '01811112222'), isNotNull);
+      expect(
+        Validators.validateAgentPhone('01811112222', ownPhone: '01811112222'),
+        'The agent must be a different user.',
+      );
+    });
+
+    test('validateRecipientId rejects non-positive ids and your own id', () {
+      expect(Validators.validateRecipientId('42', ownId: 7), isNull);
+      expect(Validators.validateRecipientId('0', ownId: 7), isNotNull);
+      expect(Validators.validateRecipientId('abc', ownId: 7), isNotNull);
+      expect(Validators.validateRecipientId('7', ownId: 7), "You can't send money to yourself.");
+    });
   });
 }

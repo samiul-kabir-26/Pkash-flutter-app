@@ -3,8 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'session_controller.dart';
 
+/// §8.1: reached after AGENT registration or an agent-login 403. The server returns the
+/// same 403 for "not approved yet", "suspended" and "no agent role" (G10), so the copy is
+/// generic. No wallet or transaction calls happen here.
 class AgentPendingScreen extends ConsumerWidget {
   const AgentPendingScreen({super.key});
+
+  void _goToLogin(BuildContext context, WidgetRef ref, Panel panel) {
+    final phone = ref.read(loginPrefillProvider)?.phoneNumber ?? '';
+    ref.read(loginPrefillProvider.notifier).set(LoginPrefill(panel: panel, phoneNumber: phone));
+    context.go('/login');
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -12,7 +21,7 @@ class AgentPendingScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Agent Registration'),
+        title: const Text('Agent Access'),
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
@@ -39,7 +48,7 @@ class AgentPendingScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 28),
               Text(
-                'Approval Pending',
+                'Agent access not available yet',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
@@ -47,50 +56,26 @@ class AgentPendingScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Thank you for registering as an Agent. Your application is currently under review by our administrative team.\n\nOnce approved, you will be able to log in to the Agent portal and process customer cash transactions.',
+                "Agent access isn't available for this number yet. If you registered recently, "
+                'an admin must approve you first. Otherwise contact support.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 15, height: 1.5, color: Colors.black87),
-              ),
-              const SizedBox(height: 24),
-              Card(
-                color: Colors.grey.shade50,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.grey.shade300),
-                ),
-                child: const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.blue),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Verification typically takes 1-2 business days. You will be notified once reviewed.',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                style: TextStyle(fontSize: 15, height: 1.5),
               ),
               const Spacer(),
               OutlinedButton.icon(
                 icon: const Icon(Icons.support_agent),
                 label: const Text('Contact Support'),
-                onPressed: () {
-                  context.push('/forgot-pin');
-                },
+                onPressed: () => context.push('/forgot-pin'),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: () => _goToLogin(context, ref, Panel.user),
+                child: const Text('Use the customer app'),
               ),
               const SizedBox(height: 12),
               FilledButton(
-                onPressed: () async {
-                  await ref.read(sessionControllerProvider.notifier).logout();
-                  if (context.mounted) {
-                    context.go('/login');
-                  }
-                },
-                child: const Text('Back to Login'),
+                onPressed: () => _goToLogin(context, ref, Panel.agent),
+                child: const Text('Try signing in again'),
               ),
             ],
           ),

@@ -2,6 +2,7 @@ import 'package:decimal/decimal.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/money/money.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/network/dio_provider.dart';
 import '../domain/pagination.dart';
 import '../domain/transaction.dart';
@@ -26,6 +27,7 @@ class TransactionRepository {
 
   TransactionRepository(this._dio);
 
+  /// Wallet-scoped: returns rows touching the wallet that matches the token's ability.
   Future<PaginatedTransactions> getHistory({
     int page = 1,
     int perPage = 20,
@@ -33,127 +35,100 @@ class TransactionRepository {
     String? status,
     String? fromDate,
     String? toDate,
-  }) async {
-    final queryParams = <String, dynamic>{
-      'page': page,
-      'per_page': perPage,
-      if (type != null && type.isNotEmpty && type != 'ALL') 'type': type,
-      if (status != null && status.isNotEmpty) 'status': status,
-      'from_date': ?fromDate,
-      'to_date': ?toDate,
-    };
+  }) => apiCall(() async {
+        final queryParams = <String, dynamic>{
+          'page': page,
+          'per_page': perPage,
+          if (type != null && type.isNotEmpty && type != 'ALL') 'type': type,
+          if (status != null && status.isNotEmpty) 'status': status,
+          'from_date': ?fromDate,
+          'to_date': ?toDate,
+        };
 
-    final response = await _dio.get(
-      '/transactions/history',
-      queryParameters: queryParams,
-    );
+        final response = await _dio.get(
+          '/transactions/history',
+          queryParameters: queryParams,
+        );
 
-    final data = response.data['data'] as Map<String, dynamic>;
-    final txListJson = (data['transactions'] ?? data['items'] ?? []) as List;
-    final transactions = txListJson
-        .map((e) => Transaction.fromJson(e as Map<String, dynamic>))
-        .toList();
-    final pagination = Pagination.fromJson(data['pagination'] as Map<String, dynamic>);
+        final data = response.data['data'] as Map<String, dynamic>;
+        final transactions = (data['transactions'] as List)
+            .map((e) => Transaction.fromJson(e as Map<String, dynamic>))
+            .toList();
+        final pagination = Pagination.fromJson(data['pagination'] as Map<String, dynamic>);
 
-    return PaginatedTransactions(
-      transactions: transactions,
-      pagination: pagination,
-    );
-  }
+        return PaginatedTransactions(
+          transactions: transactions,
+          pagination: pagination,
+        );
+      });
 
-  Future<Transaction> getTransaction(int id) async {
-    final response = await _dio.get('/transactions/$id');
-    final data = response.data['data'] as Map<String, dynamic>;
-    return Transaction.fromJson(data['transaction'] as Map<String, dynamic>);
-  }
+  Future<Transaction> getTransaction(int id) => apiCall(() async {
+        final response = await _dio.get('/transactions/$id');
+        return _transactionFrom(response);
+      });
 
   Future<Transaction> topUp({
     required Decimal amount,
     required String idempotencyKey,
     String? description,
-  }) async {
-    final response = await _dio.post(
-      '/transactions/top-up',
-      data: {
+  }) => _post('/transactions/top-up', {
         'amount': toApiAmount(amount),
         'idempotency_key': idempotencyKey,
         if (description != null && description.isNotEmpty) 'description': description,
-      },
-    );
-    final data = response.data['data'] as Map<String, dynamic>;
-    return Transaction.fromJson(data['transaction'] as Map<String, dynamic>);
-  }
+      });
 
   Future<Transaction> transfer({
     required int recipientId,
     required Decimal amount,
     required String idempotencyKey,
     String? description,
-  }) async {
-    final response = await _dio.post(
-      '/transactions/transfer',
-      data: {
+  }) => _post('/transactions/transfer', {
         'recipient_id': recipientId,
         'amount': toApiAmount(amount),
         'idempotency_key': idempotencyKey,
         if (description != null && description.isNotEmpty) 'description': description,
-      },
-    );
-    final data = response.data['data'] as Map<String, dynamic>;
-    return Transaction.fromJson(data['transaction'] as Map<String, dynamic>);
-  }
+      });
 
   Future<Transaction> cashIn({
-    required int agentId,
+    required String agentPhone,
     required Decimal amount,
     required String idempotencyKey,
     String? description,
-  }) async {
-    final response = await _dio.post(
-      '/transactions/cash-in',
-      data: {
-        'agent_id': agentId,
+  }) => _post('/transactions/cash-in', {
+        'agent_phone': agentPhone,
         'amount': toApiAmount(amount),
         'idempotency_key': idempotencyKey,
         if (description != null && description.isNotEmpty) 'description': description,
-      },
-    );
-    final data = response.data['data'] as Map<String, dynamic>;
-    return Transaction.fromJson(data['transaction'] as Map<String, dynamic>);
-  }
+      });
 
   Future<Transaction> cashOut({
-    required int agentId,
+    required String agentPhone,
     required Decimal amount,
     required String idempotencyKey,
     String? description,
-  }) async {
-    final response = await _dio.post(
-      '/transactions/cash-out',
-      data: {
-        'agent_id': agentId,
+  }) => _post('/transactions/cash-out', {
+        'agent_phone': agentPhone,
         'amount': toApiAmount(amount),
         'idempotency_key': idempotencyKey,
         if (description != null && description.isNotEmpty) 'description': description,
-      },
-    );
-    final data = response.data['data'] as Map<String, dynamic>;
-    return Transaction.fromJson(data['transaction'] as Map<String, dynamic>);
-  }
+      });
 
   Future<Transaction> agentWithdrawal({
     required Decimal amount,
     required String idempotencyKey,
     String? description,
-  }) async {
-    final response = await _dio.post(
-      '/transactions/agent/withdrawal',
-      data: {
+  }) => _post('/transactions/agent/withdrawal', {
         'amount': toApiAmount(amount),
         'idempotency_key': idempotencyKey,
         if (description != null && description.isNotEmpty) 'description': description,
-      },
-    );
+      });
+
+  Future<Transaction> _post(String path, Map<String, dynamic> body) => apiCall(() async {
+        final response = await _dio.post(path, data: body);
+        return _transactionFrom(response);
+      });
+
+  Transaction _transactionFrom(Response<dynamic> response) {
     final data = response.data['data'] as Map<String, dynamic>;
     return Transaction.fromJson(data['transaction'] as Map<String, dynamic>);
   }

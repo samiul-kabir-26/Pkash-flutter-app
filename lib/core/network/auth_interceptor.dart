@@ -10,7 +10,8 @@ class AuthInterceptor extends Interceptor {
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
     options.headers['Accept'] = 'application/json';
 
-    final token = await _tokenStorage.readToken();
+    // An explicit header wins (e.g. revoking a token that was never stored, §6.5).
+    final token = options.headers.containsKey('Authorization') ? null : await _tokenStorage.readToken();
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
     }

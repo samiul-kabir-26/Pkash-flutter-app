@@ -5,66 +5,81 @@ import 'package:pkash/core/network/api_exception.dart';
 import 'package:pkash/features/transactions/domain/transaction.dart';
 import 'package:pkash/features/transfer/presentation/money_movement_controller.dart';
 
+final intent = MoneyIntent(
+  type: 'TRANSFER',
+  amount: Decimal.parse('500.00'),
+  counterparty: '42',
+  description: 'rent',
+);
+
+Transaction txFor(MoneyIntent intent, {int id = 101}) =>
+    Transaction(id: id, type: intent.type, amount: intent.amount);
+
 void main() {
-  group('MoneyMovementController Tests (§7.2 & §10.3)', () {
+  group('MoneyMovementController (§7.2, §10.3)', () {
     late ProviderContainer container;
 
+    MoneyMovementController controller() => container.read(moneyMovementControllerProvider.notifier);
+    MoneyMovementState state() => container.read(moneyMovementControllerProvider);
+
     setUp(() {
-      container = ProviderContainer();
+      container = ProviderContainer(
+        overrides: [
+          moneyFlowRetryDelaysProvider.overrideWithValue(const [Duration.zero, Duration.zero, Duration.zero]),
+        ],
+      );
       container.listen(moneyMovementControllerProvider, (_, _) {});
     });
 
-    tearDown(() {
-      container.dispose();
+    tearDown(() => container.dispose());
+
+    test('creates the key on entering Review', () {
+      expect(state().idempotencyKey, isNull);
+      controller().enterReview(intent);
+      expect(state().stage, MoneyFlowStage.review);
+      expect(state().idempotencyKey, isNotNull);
     });
 
-    test('generates fresh idempotency key upon entering review', () {
-      final controller = container.read(moneyMovementControllerProvider.notifier);
+    test('same intent after going back keeps the key; any payload change gets a new key', () {
+      controller().enterReview(intent);
+      final key1 = state().idempotencyKey;
 
-      expect(container.read(moneyMovementControllerProvider).stage, MoneyFlowStage.form);
-      expect(container.read(moneyMovementControllerProvider).idempotencyKey, isNull);
+      controller().backToForm();
+      controller().enterReview(intent);
+      expect(state().idempotencyKey, key1);
 
-      controller.enterReview();
-      expect(container.read(moneyMovementControllerProvider).stage, MoneyFlowStage.review);
-      final key1 = container.read(moneyMovementControllerProvider).idempotencyKey;
-      expect(key1, isNotNull);
-
-      // Going back to form and re-entering review produces a new key (new intent)
-      controller.backToForm();
-      expect(container.read(moneyMovementControllerProvider).stage, MoneyFlowStage.form);
-
-      controller.enterReview();
-      final key2 = container.read(moneyMovementControllerProvider).idempotencyKey;
-      expect(key2, isNotNull);
-      expect(key1, isNot(equals(key2)));
+      for (final changed in [
+        MoneyIntent(type: 'TRANSFER', amount: Decimal.parse('600.00'), counterparty: '42', description: 'rent'),
+        MoneyIntent(type: 'TRANSFER', amount: Decimal.parse('500.00'), counterparty: '43', description: 'rent'),
+        MoneyIntent(type: 'TRANSFER', amount: Decimal.parse('500.00'), counterparty: '42', description: 'food'),
+      ]) {
+        final before = state().idempotencyKey;
+        controller().backToForm();
+        controller().enterReview(changed);
+        expect(state().idempotencyKey, isNot(before));
+      }
     });
 
-    test('reaches success stage upon successful operation and sets transaction', () async {
-      final controller = container.read(moneyMovementControllerProvider.notifier);
-      controller.enterReview();
-      final key = container.read(moneyMovementControllerProvider).idempotencyKey!;
+    test('success: uses the review key, stores the receipt, discards the key', () async {
+      controller().enterReview(intent);
+      final key = state().idempotencyKey!;
 
-      final sampleTx = Transaction(
-        id: 101,
-        type: 'TOP_UP',
-        amount: Decimal.fromInt(100),
-        idempotencyKey: key,
-      );
-
-      await controller.submit((idempotencyKey) async {
-        expect(idempotencyKey, key);
-        return sampleTx;
+      await controller().submit((k) async {
+        expect(k, key);
+        return txFor(intent);
       });
 
-      expect(container.read(moneyMovementControllerProvider).stage, MoneyFlowStage.success);
-      expect(container.read(moneyMovementControllerProvider).transaction, sampleTx);
+      expect(state().stage, MoneyFlowStage.success);
+      expect(state().transaction!.id, 101);
+      expect(state().receiptMismatch, isFalse);
+      expect(state().idempotencyKey, isNull);
     });
 
-    test('handles 4xx definite failure correctly', () async {
-      final controller = container.read(moneyMovementControllerProvider.notifier);
-      controller.enterReview();
+    test('first-attempt 4xx is a definite failure; a new attempt gets a new key', () async {
+      controller().enterReview(intent);
+      final key = state().idempotencyKey;
 
-      await controller.submit((idempotencyKey) async {
+      await controller().submit((_) async {
         throw const ApiException(
           statusCode: 422,
           message: 'Insufficient balance.',
@@ -72,36 +87,91 @@ void main() {
         );
       });
 
-      expect(container.read(moneyMovementControllerProvider).stage, MoneyFlowStage.failed);
-      expect(container.read(moneyMovementControllerProvider).errorMessage, 'Insufficient balance.');
-      expect(container.read(moneyMovementControllerProvider).fieldErrors['amount'], 'Exceeds available balance.');
+      expect(state().stage, MoneyFlowStage.failed);
+      expect(state().errorMessage, 'Insufficient balance.');
+      expect(state().fieldErrors['amount'], 'Exceeds available balance.');
+
+      controller().enterReview(intent);
+      expect(state().idempotencyKey, isNot(key));
     });
 
-    test('handles timeout / network drop with unknown outcome retry using SAME key', () async {
-      final controller = container.read(moneyMovementControllerProvider.notifier);
-      controller.enterReview();
-      final key = container.read(moneyMovementControllerProvider).idempotencyKey!;
+    test('timeout → unknown → retry with the SAME key → success exactly once', () async {
+      controller().enterReview(intent);
+      final keys = <String>[];
 
-      final sampleTx = Transaction(
-        id: 102,
-        type: 'TOP_UP',
-        amount: Decimal.fromInt(200),
-        idempotencyKey: key,
-      );
+      await controller().submit((k) async {
+        keys.add(k);
+        if (keys.length == 1) throw const NetworkException();
+        return txFor(intent);
+      });
 
-      int attempts = 0;
-      await controller.submit((idempotencyKey) async {
+      expect(keys, hasLength(2));
+      expect(keys.toSet(), hasLength(1));
+      expect(state().stage, MoneyFlowStage.success);
+    });
+
+    test('timeout → retry returns 409 → unknown, not failed (G7)', () async {
+      controller().enterReview(intent);
+      var attempts = 0;
+
+      await controller().submit((_) async {
         attempts++;
-        expect(idempotencyKey, key); // MUST BE SAME KEY
-        if (attempts == 1) {
-          throw const NetworkException(message: 'Connection timeout');
-        }
-        return sampleTx;
+        if (attempts == 1) throw const NetworkException();
+        throw const ApiException(statusCode: 409, message: 'Agent is not approved.');
       });
 
       expect(attempts, 2);
-      expect(container.read(moneyMovementControllerProvider).stage, MoneyFlowStage.success);
-      expect(container.read(moneyMovementControllerProvider).transaction, sampleTx);
+      expect(state().stage, MoneyFlowStage.unknownOutcome);
+      expect(state().isRetrying, isFalse);
+    });
+
+    test('network keeps failing → gives up after the retries, still unknown, never a new key', () async {
+      controller().enterReview(intent);
+      final keys = <String>{};
+      var attempts = 0;
+
+      await controller().submit((k) async {
+        attempts++;
+        keys.add(k);
+        throw const NetworkException();
+      });
+
+      expect(attempts, 4); // first attempt + 3 retries
+      expect(keys, hasLength(1));
+      expect(state().stage, MoneyFlowStage.unknownOutcome);
+    });
+
+    test('receipt mismatch (returned amount ≠ submitted) is detected', () async {
+      controller().enterReview(intent);
+
+      await controller().submit((_) async => Transaction(
+            id: 7,
+            type: 'TRANSFER',
+            amount: Decimal.parse('100.00'),
+          ));
+
+      expect(state().stage, MoneyFlowStage.success);
+      expect(state().receiptMismatch, isTrue);
+      expect(state().transaction!.amount, Decimal.parse('100.00'));
+    });
+
+    test('Confirm cannot fire twice while submitting', () async {
+      controller().enterReview(intent);
+      var calls = 0;
+
+      final first = controller().submit((_) async {
+        calls++;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        return txFor(intent);
+      });
+      await controller().submit((_) async {
+        calls++;
+        return txFor(intent, id: 999);
+      });
+      await first;
+
+      expect(calls, 1);
+      expect(state().transaction!.id, 101);
     });
   });
 }

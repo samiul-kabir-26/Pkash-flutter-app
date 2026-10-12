@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'primary_button.dart';
 
 class ConfirmSheetItem {
@@ -41,6 +42,7 @@ class ConfirmSheet extends StatelessWidget {
     return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      enableDrag: false, // no swipe-dismiss while a money call is in flight
       backgroundColor: Colors.transparent,
       builder: (ctx) => _StatefulConfirmSheet(
         title: title,
@@ -81,90 +83,104 @@ class _StatefulConfirmSheetState extends State<_StatefulConfirmSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.scaffoldBackgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade400,
-                  borderRadius: BorderRadius.circular(2),
+    // Stage 3 (§7.2): no back while submitting.
+    return PopScope(
+      canPop: !_isLoading,
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
-            Text(
-              widget.title,
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            Container(
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(16),
+              Text(
+                widget.title,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
               ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: widget.items.map((item) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          item.label,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 14,
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: widget.items.map((item) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            item.label,
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 14,
+                            ),
                           ),
-                        ),
-                        Text(
-                          item.value,
-                          style: TextStyle(
-                            fontWeight: item.isHighlight ? FontWeight.bold : FontWeight.w600,
-                            fontSize: item.isHighlight ? 18 : 15,
-                            color: item.isHighlight ? theme.colorScheme.primary : null,
+                          Text(
+                            item.value,
+                            style: TextStyle(
+                              fontWeight: item.isHighlight
+                                  ? FontWeight.bold
+                                  : FontWeight.w600,
+                              fontSize: item.isHighlight ? 18 : 15,
+                              color: item.isHighlight
+                                  ? theme.colorScheme.primary
+                                  : null,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            PrimaryButton(
-              label: widget.confirmLabel,
-              isLoading: _isLoading,
-              onPressed: () async {
-                final navigator = Navigator.of(context);
-                setState(() => _isLoading = true);
-                try {
-                  await widget.onConfirmed();
+              const SizedBox(height: 24),
+              PrimaryButton(
+                label: widget.confirmLabel,
+                isLoading: _isLoading,
+                onPressed: () async {
+                  if (_isLoading) return;
+                  final navigator = Navigator.of(context);
+                  setState(() => _isLoading = true);
+                  try {
+                    await widget.onConfirmed();
+                  } finally {
+                    if (mounted) setState(() => _isLoading = false);
+                  }
+                  // The caller handles the outcome once the sheet is closed.
                   navigator.pop(true);
-                } catch (_) {
-                  if (mounted) setState(() => _isLoading = false);
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            if (!_isLoading)
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
+                },
               ),
-          ],
+              const SizedBox(height: 12),
+              if (!_isLoading)
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+            ],
+          ),
         ),
       ),
     );

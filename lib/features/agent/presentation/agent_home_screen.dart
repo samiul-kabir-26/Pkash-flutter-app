@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/money/money.dart';
+import '../../../core/network/api_exception.dart';
 import '../../auth/presentation/session_controller.dart';
 import '../../profile/presentation/profile_providers.dart';
-import '../../transactions/domain/transaction_direction.dart';
+import '../../transactions/presentation/transaction_providers.dart';
+import '../../transactions/presentation/transaction_tile.dart';
 import '../../wallet/presentation/user_home_screen.dart';
 import '../../wallet/presentation/wallet_providers.dart';
 
@@ -28,9 +30,7 @@ class _AgentHomeScreenState extends ConsumerState<AgentHomeScreen> {
     final recentTxAsync = ref.watch(recentTransactionsProvider);
 
     final agentInfo = profileAsync.value?.agentInfo;
-    final commissionRate = agentInfo != null
-        ? (agentInfo.rate * Decimal.fromInt(100)).toStringAsFixed(2)
-        : '1.00';
+    final commissionRate = agentInfo?.commissionRate != null ? formatRate(agentInfo!.rate) : '—';
     final totalCommission = agentInfo?.commission ?? Decimal.zero;
 
     return Scaffold(
@@ -77,6 +77,28 @@ class _AgentHomeScreenState extends ConsumerState<AgentHomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (walletAsync.value?.isBlocked ?? false)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    border: Border.all(color: Colors.red.shade300),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.block, color: Colors.red.shade700),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Your agent wallet is blocked. Contact support.',
+                          style: TextStyle(color: Colors.red.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               // Balance Card
               Card(
                 elevation: 2,
@@ -125,9 +147,9 @@ class _AgentHomeScreenState extends ConsumerState<AgentHomeScreen> {
                               child: CircularProgressIndicator(color: Colors.white),
                             ),
                           ),
-                          error: (_, _) => const Text(
-                            'Error loading balance',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          error: (err, _) => Text(
+                            walletErrorText(err, panel: Panel.agent),
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -141,6 +163,11 @@ class _AgentHomeScreenState extends ConsumerState<AgentHomeScreen> {
                 ),
               ),
 
+              const SizedBox(height: 8),
+              Text(
+                'Customer cash-ins are paid from this wallet. If it runs low, their cash-ins fail.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
               const SizedBox(height: 16),
 
               // Commission Earnings Card
@@ -160,7 +187,7 @@ class _AgentHomeScreenState extends ConsumerState<AgentHomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Commission Rate: $commissionRate%',
+                            'Commission Rate: $commissionRate',
                             style: TextStyle(fontSize: 13, color: Colors.teal.shade800),
                           ),
                           const SizedBox(height: 4),
@@ -180,7 +207,9 @@ class _AgentHomeScreenState extends ConsumerState<AgentHomeScreen> {
                         ],
                       ),
                       FilledButton.tonal(
-                        onPressed: () => context.push('/agent/withdraw'),
+                        onPressed: walletAsync.hasValue && !walletAsync.value!.isBlocked
+                            ? () => context.push('/agent/withdraw')
+                            : null,
                         child: const Text('Withdraw'),
                       ),
                     ],
@@ -284,42 +313,11 @@ class _AgentHomeScreenState extends ConsumerState<AgentHomeScreen> {
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (ctx, index) {
                       final tx = transactions[index];
-                      final dir = directionFor(tx, myId);
-                      final isInbound = dir == TransactionDirection.inbound;
-
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor:
-                              isInbound ? Colors.green.shade50 : Colors.red.shade50,
-                          child: Icon(
-                            isInbound ? Icons.arrow_downward : Icons.arrow_upward,
-                            color: isInbound
-                                ? Colors.green.shade700
-                                : Colors.red.shade700,
-                          ),
-                        ),
-                        title: Text(
-                          tx.type.replaceAll('_', ' '),
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                        ),
-                        subtitle: Text(
-                          tx.createdAt != null
-                              ? '${tx.createdAt!.toLocal().day}/${tx.createdAt!.toLocal().month}/${tx.createdAt!.toLocal().year}'
-                              : '',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        trailing: Text(
-                          '${isInbound ? '+' : '-'}${formatBdt(tx.amount)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color:
-                                isInbound ? Colors.green.shade700 : Colors.red.shade700,
-                          ),
-                        ),
-                        onTap: () {
-                          context.push('/agent/history/${tx.id}');
-                        },
+                      return TransactionTile(
+                        transaction: tx,
+                        panel: Panel.agent,
+                        myUserId: myId,
+                        onTap: () => context.push('/agent/history/${tx.id}'),
                       );
                     },
                   );
@@ -332,7 +330,7 @@ class _AgentHomeScreenState extends ConsumerState<AgentHomeScreen> {
                 ),
                 error: (err, _) => Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Text('Could not load activity: $err'),
+                  child: Text(err is NetworkException ? 'No connection.' : 'Could not load activity.'),
                 ),
               ),
             ],

@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "data": {
+    "wallet": {
+      "id": 2,
+      "user_id": 5,
+      "kind": "AGENT",
+      "balance": 50.5,
+      "currency": "BDT",
+      "is_blocked": false,
+      "blocked_by": null,
+      "blocked_at": null,
+      "created_at": "2026-10-11T04:17:51.000000Z",
+      "updated_at": "2026-10-11T04:20:00.000000Z"
+    }
+  }
+}

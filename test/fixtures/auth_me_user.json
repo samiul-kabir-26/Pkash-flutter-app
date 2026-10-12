@@ -1,0 +1,23 @@
+{
+  "success": true,
+  "message": "User profile retrieved successfully",
+  "data": {
+    "user": {
+      "id": 4,
+      "name": "Flutter Test User",
+      "phone_number": "01711112233",
+      "email": null,
+      "roles": [
+        "USER"
+      ],
+      "permissions": [],
+      "is_verified": false,
+      "is_active": "ACTIVE"
+    },
+    "token": null,
+    "token_type": null,
+    "abilities": [
+      "user"
+    ]
+  }
+}

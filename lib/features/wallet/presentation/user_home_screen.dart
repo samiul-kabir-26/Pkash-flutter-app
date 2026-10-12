@@ -3,16 +3,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/money/money.dart';
+import '../../../core/network/api_exception.dart';
 import '../../auth/presentation/session_controller.dart';
-import '../../transactions/data/transaction_repository.dart';
-import '../../transactions/domain/transaction_direction.dart';
+import '../../transactions/presentation/transaction_providers.dart';
+import '../../transactions/presentation/transaction_tile.dart';
 import 'wallet_providers.dart';
 
-final recentTransactionsProvider = FutureProvider.autoDispose((ref) async {
-  final repo = ref.watch(transactionRepositoryProvider);
-  final result = await repo.getHistory(perPage: 5);
-  return result.transactions;
-});
+/// Shown instead of the balance when `/wallets/me` fails. A 404 means this account has no
+/// wallet for the current panel (possible after an admin-assigned role, §7.1).
+String walletErrorText(Object error, {required Panel panel}) {
+  if (error is ApiException && error.isNotFound) {
+    return panel == Panel.agent
+        ? 'No agent wallet on this account. Contact support.'
+        : 'No customer wallet on this account. Contact support.';
+  }
+  if (error is NetworkException) return 'No connection.';
+  return 'Error loading balance';
+}
 
 class UserHomeScreen extends ConsumerStatefulWidget {
   const UserHomeScreen({super.key});
@@ -105,7 +112,7 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Your wallet is blocked. Sending and withdrawing are disabled. Contact support.',
+                                  'Your wallet is blocked. Contact support.',
                                   style: TextStyle(fontSize: 13, color: Colors.red.shade800),
                                 ),
                               ],
@@ -168,9 +175,9 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
                               child: CircularProgressIndicator(color: Colors.white),
                             ),
                           ),
-                          error: (_, _) => const Text(
-                            'Error loading balance',
-                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          error: (err, _) => Text(
+                            walletErrorText(err, panel: Panel.user),
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -189,6 +196,7 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
               // Quick Actions
               walletAsync.maybeWhen(
                 data: (wallet) => _buildQuickActions(context, isBlocked: wallet.isBlocked),
+                error: (_, _) => _buildQuickActions(context, isBlocked: true),
                 orElse: () => _buildQuickActions(context, isBlocked: false),
               ),
 
@@ -214,8 +222,11 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Transaction Limits',
+                          Text(
+                            // Caps are one row per person, shared by both panels (G3).
+                            (session?.user.roles.contains('AGENT') ?? false)
+                                ? 'Daily/monthly limit (shared across your accounts)'
+                                : 'Daily/monthly limit',
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                           ),
                           const SizedBox(height: 12),
@@ -301,38 +312,11 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
                     separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (ctx, index) {
                       final tx = transactions[index];
-                      final dir = directionFor(tx, myId);
-                      final isInbound = dir == TransactionDirection.inbound;
-
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: isInbound ? Colors.green.shade50 : Colors.red.shade50,
-                          child: Icon(
-                            isInbound ? Icons.arrow_downward : Icons.arrow_upward,
-                            color: isInbound ? Colors.green.shade700 : Colors.red.shade700,
-                          ),
-                        ),
-                        title: Text(
-                          tx.type.replaceAll('_', ' '),
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                        ),
-                        subtitle: Text(
-                          tx.createdAt != null
-                              ? '${tx.createdAt!.toLocal().day}/${tx.createdAt!.toLocal().month}/${tx.createdAt!.toLocal().year}'
-                              : '',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        trailing: Text(
-                          '${isInbound ? '+' : '-'}${formatBdt(tx.amount)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: isInbound ? Colors.green.shade700 : Colors.red.shade700,
-                          ),
-                        ),
-                        onTap: () {
-                          context.push('/user/history/${tx.id}');
-                        },
+                      return TransactionTile(
+                        transaction: tx,
+                        panel: Panel.user,
+                        myUserId: myId,
+                        onTap: () => context.push('/user/history/${tx.id}'),
                       );
                     },
                   );
@@ -345,7 +329,7 @@ class _UserHomeScreenState extends ConsumerState<UserHomeScreen> {
                 ),
                 error: (err, _) => Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Text('Could not load transactions: $err'),
+                  child: Text(err is NetworkException ? 'No connection.' : 'Could not load transactions.'),
                 ),
               ),
             ],

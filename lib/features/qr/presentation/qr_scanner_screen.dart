@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../core/widgets/snackbar_helpers.dart';
+import '../domain/qr_payload.dart';
 
 class QrScannerScreen extends StatefulWidget {
   final String expectedType; // 'user' or 'agent'
@@ -14,6 +15,7 @@ class QrScannerScreen extends StatefulWidget {
 class _QrScannerScreenState extends State<QrScannerScreen> {
   final MobileScannerController _controller = MobileScannerController();
   bool _hasDetected = false;
+  String? _lastRejected; // the camera reports the same code every frame; warn once
 
   @override
   void dispose() {
@@ -38,33 +40,20 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
   }
 
+  /// Returns the agent phone (agent QR) or user ID (customer QR). A scan only fills the
+  /// form; the user still goes through Review (§9.1), nothing is auto-submitted.
   String? _parsePayload(String raw) {
-    // Format: walletms:v1:user:<id> or walletms:v1:agent:<id>
-    final parts = raw.split(':');
-    if (parts.length == 4 && parts[0] == 'walletms' && parts[1] == 'v1') {
-      final type = parts[2];
-      final id = parts[3];
-
-      if (type != widget.expectedType) {
-        showErrorSnackBar(
-          context,
-          widget.expectedType == 'agent'
-              ? 'This is a customer QR code, not an agent QR.'
-              : 'This is an agent QR code, not a customer QR.',
-        );
+    final expected = widget.expectedType == 'agent' ? QrTargetType.agent : QrTargetType.user;
+    switch (parseQrPayload(raw, expected: expected)) {
+      case QrParsed(:final value):
+        return value;
+      case QrRejected(:final reason):
+        if (_lastRejected != raw) {
+          _lastRejected = raw;
+          showErrorSnackBar(context, reason);
+        }
         return null;
-      }
-
-      if (int.tryParse(id) != null) {
-        return id;
-      }
-    } else if (int.tryParse(raw) != null) {
-      // Direct raw integer fallback for convenience
-      return raw;
     }
-
-    showErrorSnackBar(context, 'Invalid QR code scanned.');
-    return null;
   }
 
   @override

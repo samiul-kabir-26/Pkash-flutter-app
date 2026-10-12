@@ -30,3 +30,13 @@ String formatBdt(Decimal amount, {bool showSymbol = true}) {
 String toApiAmount(Decimal amount) {
   return amount.toStringAsFixed(2);
 }
+
+/// `0.0100` → `1%`, `0.05` → `5%`, `0.0125` → `1.25%` (up to 2 decimals).
+String formatRate(Object? json) {
+  final percent = parseMoney(json) * Decimal.fromInt(100);
+  var text = percent.toStringAsFixed(2);
+  if (text.contains('.')) {
+    text = text.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+  }
+  return '$text%';
+}

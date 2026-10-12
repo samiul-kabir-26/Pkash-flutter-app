@@ -6,12 +6,18 @@
       "id": 4,
       "name": "Flutter Test User",
       "phone_number": "01711112233",
-      "roles": ["USER"],
+      "email": null,
+      "roles": [
+        "USER"
+      ],
+      "permissions": [],
       "is_verified": false,
       "is_active": "ACTIVE"
     },
-    "token": "1|56t1aSMI73cCxIXrmY0LIRvEuqT4knesppvcklXna67ca178",
+    "token": "1|redacted-test-token",
     "token_type": "Bearer",
-    "abilities": ["user"]
+    "abilities": [
+      "user"
+    ]
   }
 }

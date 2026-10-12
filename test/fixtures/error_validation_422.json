@@ -1,0 +1,8 @@
+{
+  "message": "The phone number must be a valid 11-digit Bangladeshi mobile number.",
+  "errors": {
+    "agent_phone": [
+      "The phone number must be a valid 11-digit Bangladeshi mobile number."
+    ]
+  }
+}

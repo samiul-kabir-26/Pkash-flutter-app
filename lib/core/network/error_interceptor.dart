@@ -3,15 +3,22 @@ import 'api_exception.dart';
 
 class ErrorInterceptor extends Interceptor {
   final void Function()? onUnauthorized;
+  final void Function()? onPasswordChangeRequired;
 
-  ErrorInterceptor({this.onUnauthorized});
+  ErrorInterceptor({this.onUnauthorized, this.onPasswordChangeRequired});
+
+  // A 401 on these means "wrong credentials" (or a token already gone), not "session over".
+  static const _credentialRoutes = [
+    '/auth/user/login',
+    '/auth/agent/login',
+    '/auth/register',
+    '/auth/logout',
+  ];
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     final path = err.requestOptions.path;
-    final isLoginRoute = path.contains('/auth/user/login') ||
-        path.contains('/auth/agent/login') ||
-        path.contains('/auth/admin/login');
+    final isCredentialRoute = _credentialRoutes.any(path.contains);
 
     if (err.type == DioExceptionType.connectionTimeout ||
         err.type == DioExceptionType.sendTimeout ||
@@ -30,6 +37,8 @@ class ErrorInterceptor extends Interceptor {
     Map<String, String> fieldErrors = {};
     dynamic data;
 
+    // Three body shapes (§5.3): envelope, validation without `success`, and `{message}` only.
+    // `errors` may be an empty list instead of a map.
     if (response?.data != null && response!.data is Map) {
       final resData = response.data as Map;
       data = resData['data'];
@@ -52,16 +61,19 @@ class ErrorInterceptor extends Interceptor {
       message = response.statusMessage!;
     }
 
-    if (statusCode == 401 && !isLoginRoute) {
-      onUnauthorized?.call();
-    }
-
     final apiException = ApiException(
       statusCode: statusCode,
       message: message,
       fieldErrors: fieldErrors,
       data: data,
     );
+
+    if (statusCode == 401 && !isCredentialRoute) {
+      onUnauthorized?.call();
+    }
+    if (isPasswordChangeRequired(apiException)) {
+      onPasswordChangeRequired?.call();
+    }
 
     return handler.next(
       err.copyWith(

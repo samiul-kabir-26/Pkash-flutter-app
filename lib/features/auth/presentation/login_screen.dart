@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,11 +25,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   int _selectedPanelIndex = 0;
   bool _isLoading = false;
 
+  // 429: login is throttled to 5 attempts/min; keep the button off for a minute.
+  Timer? _cooldown;
+
+  @override
+  void initState() {
+    super.initState();
+    // After a panel switch or agent registration: preselect the panel, prefill the phone.
+    final prefill = ref.read(loginPrefillProvider);
+    if (prefill != null) {
+      _selectedPanelIndex = prefill.panel == Panel.agent ? 1 : 0;
+      _phoneController.text = prefill.phoneNumber;
+    }
+  }
+
   @override
   void dispose() {
+    _cooldown?.cancel();
     _phoneController.dispose();
     _pinController.dispose();
     super.dispose();
+  }
+
+  void _startCooldown() {
+    _cooldown?.cancel();
+    _cooldown = Timer(const Duration(seconds: 60), () {
+      if (mounted) setState(() => _cooldown = null);
+    });
+    setState(() {});
   }
 
   Future<void> _handleLogin() async {
@@ -64,19 +88,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
 
-      if (e.isUnauthorized) {
+      if (e is NetworkException) {
+        showErrorSnackBar(context, 'No connection. Please check your internet connection.');
+      } else if (e.isUnauthorized) {
+        // Don't reveal whether the phone or the PIN was wrong.
         showErrorSnackBar(context, 'Incorrect phone number or PIN.');
+      } else if (e.isForbidden && _selectedPanelIndex == 1) {
+        // The agent route returns the same 403 for no role, PENDING, SUSPENDED (G10).
+        ref.read(loginPrefillProvider.notifier).set(
+              LoginPrefill(panel: Panel.agent, phoneNumber: phone),
+            );
+        context.go('/agent-pending');
       } else if (e.isForbidden) {
         _showForbiddenDialog(e.message);
       } else if (e.isRateLimited) {
-        showErrorSnackBar(context, 'Too many login attempts. Please wait a minute before retrying.');
+        showErrorSnackBar(context, 'Too many attempts, try again in a minute.');
+        _startCooldown();
+      } else if (e.isServerError) {
+        showErrorSnackBar(context, 'Something went wrong.');
       } else {
         showErrorSnackBar(context, e.message);
       }
-    } catch (e) {
-      if (mounted) {
-        showErrorSnackBar(context, 'Could not connect to server. Please check your internet connection.');
-      }
+    } catch (_) {
+      if (mounted) showErrorSnackBar(context, 'Something went wrong.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -205,7 +239,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   PrimaryButton(
                     label: _selectedPanelIndex == 0 ? 'Log In as Customer' : 'Log In as Agent',
                     isLoading: _isLoading,
-                    onPressed: _handleLogin,
+                    onPressed: _cooldown != null ? null : _handleLogin,
                   ),
                   const SizedBox(height: 24),
                   Row(

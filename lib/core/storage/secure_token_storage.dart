@@ -6,12 +6,14 @@ class StoredSessionData {
   final String panel; // 'user' or 'agent'
   final List<String> abilities;
   final int userId;
+  final String phoneNumber;
 
   const StoredSessionData({
     required this.token,
     required this.panel,
     required this.abilities,
     required this.userId,
+    this.phoneNumber = '',
   });
 }
 
@@ -22,6 +24,7 @@ class SecureTokenStorage {
   static const String _keyPanel = 'auth_panel';
   static const String _keyAbilities = 'auth_abilities';
   static const String _keyUserId = 'auth_user_id';
+  static const String _keyPhone = 'auth_phone_number';
   static const String _keyAppLock = 'app_lock_enabled';
 
   SecureTokenStorage({FlutterSecureStorage? storage})
@@ -40,6 +43,7 @@ class SecureTokenStorage {
     final panel = await _storage.read(key: _keyPanel);
     final abilitiesJson = await _storage.read(key: _keyAbilities);
     final userIdStr = await _storage.read(key: _keyUserId);
+    final phone = await _storage.read(key: _keyPhone);
 
     if (token == null || panel == null || userIdStr == null) {
       return null;
@@ -63,6 +67,7 @@ class SecureTokenStorage {
       panel: panel,
       abilities: abilities,
       userId: userId,
+      phoneNumber: phone ?? '',
     );
   }
 
@@ -71,11 +76,13 @@ class SecureTokenStorage {
     required String panel,
     required List<String> abilities,
     required int userId,
+    required String phoneNumber,
   }) async {
     await _storage.write(key: _keyToken, value: token);
     await _storage.write(key: _keyPanel, value: panel);
     await _storage.write(key: _keyAbilities, value: jsonEncode(abilities));
     await _storage.write(key: _keyUserId, value: userId.toString());
+    await _storage.write(key: _keyPhone, value: phoneNumber);
   }
 
   Future<void> updateToken(String token, List<String> abilities) async {
@@ -88,6 +95,7 @@ class SecureTokenStorage {
     await _storage.delete(key: _keyPanel);
     await _storage.delete(key: _keyAbilities);
     await _storage.delete(key: _keyUserId);
+    await _storage.delete(key: _keyPhone);
   }
 
   Future<bool> isAppLockEnabled() async {

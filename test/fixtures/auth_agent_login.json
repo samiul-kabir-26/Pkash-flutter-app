@@ -6,12 +6,18 @@
       "id": 5,
       "name": "Flutter Test Agent",
       "phone_number": "01722223344",
-      "roles": ["AGENT"],
+      "email": null,
+      "roles": [
+        "AGENT"
+      ],
+      "permissions": [],
       "is_verified": false,
       "is_active": "ACTIVE"
     },
-    "token": "3|DN4txV3vK966FWZZH5UhWGx8pugxG07nkJpuHZqEe3a09852",
+    "token": "1|redacted-test-token",
     "token_type": "Bearer",
-    "abilities": ["agent"]
+    "abilities": [
+      "agent"
+    ]
   }
 }

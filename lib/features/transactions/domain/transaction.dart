@@ -27,6 +27,7 @@ abstract class Transaction with _$Transaction {
     @NullableDecimalJsonConverter() @JsonKey(name: 'sender_wallet_balance_after') Decimal? senderWalletBalanceAfter,
     @NullableDecimalJsonConverter() @JsonKey(name: 'recipient_wallet_balance_after') Decimal? recipientWalletBalanceAfter,
     @NullableDecimalJsonConverter() @JsonKey(name: 'agent_wallet_balance_after') Decimal? agentWalletBalanceAfter,
+    Map<String, dynamic>? meta,
     @JsonKey(name: 'created_at') DateTime? createdAt,
   }) = _Transaction;
 
@@ -35,6 +36,18 @@ abstract class Transaction with _$Transaction {
   bool get isCompleted => status == 'COMPLETED';
   bool get isPending => status == 'PENDING';
   bool get isFailed => status == 'FAILED';
+
+  /// Only the viewer's own `*_balance_after` key is present (§7.8); the others are absent.
+  Decimal? get myBalanceAfter =>
+      senderWalletBalanceAfter ?? recipientWalletBalanceAfter ?? agentWalletBalanceAfter;
+
+  /// COMMISSION_PAYOUT rows point at their cash-out through `meta.related_transaction_id`.
+  int? get relatedTransactionId {
+    final value = meta?['related_transaction_id'];
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
 
   factory Transaction.fromJson(Map<String, dynamic> json) => _$TransactionFromJson(json);
 }

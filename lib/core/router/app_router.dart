@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/agent/presentation/agent_home_screen.dart';
 import '../../features/agent/presentation/agent_withdrawal_screen.dart';
+import '../../features/auth/presentation/account_action_needed_screen.dart';
 import '../../features/auth/presentation/agent_pending_screen.dart';
 import '../../features/auth/presentation/forgot_pin_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
@@ -19,10 +20,14 @@ import '../../features/transfer/presentation/cash_out_screen.dart';
 import '../../features/transfer/presentation/send_money_screen.dart';
 import '../../features/transfer/presentation/top_up_screen.dart';
 import '../../features/wallet/presentation/user_home_screen.dart';
+import '../network/dio_provider.dart';
 
 class RouterRefreshNotifier extends ChangeNotifier {
   RouterRefreshNotifier(Ref ref) {
     ref.listen(sessionControllerProvider, (_, _) {
+      notifyListeners();
+    });
+    ref.listen(passwordChangeRequiredProvider, (_, _) {
       notifyListeners();
     });
   }
@@ -62,10 +67,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return isPublic ? null : '/login';
       }
 
-      // 3. Authenticated: redirect away from auth / splash screens
-      final isAgent = session.panel == 'agent';
+      // Staff with an unfinished invite: every wallet/transaction/user call is 403 (§6.7).
+      if (ref.read(passwordChangeRequiredProvider)) {
+        return location == '/account-action-needed' ? null : '/account-action-needed';
+      }
 
-      if (location == '/splash' || location == '/login' || location == '/register') {
+      // 3. Authenticated: redirect away from auth / splash screens
+      final isAgent = session.panel == Panel.agent;
+
+      if (location == '/splash' ||
+          location == '/login' ||
+          location == '/register' ||
+          location == '/account-action-needed') {
         return isAgent ? '/agent/home' : '/user/home';
       }
 
@@ -95,6 +108,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/agent-pending',
         builder: (context, state) => const AgentPendingScreen(),
+      ),
+      GoRoute(
+        path: '/account-action-needed',
+        builder: (context, state) => const AccountActionNeededScreen(),
       ),
       GoRoute(
         path: '/forgot-pin',
@@ -154,7 +171,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/user/history/:id',
         builder: (context, state) {
           final id = int.parse(state.pathParameters['id']!);
-          return TransactionDetailScreen(transactionId: id);
+          return TransactionDetailScreen(transactionId: id, panel: Panel.user);
         },
       ),
 
@@ -188,7 +205,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/agent/history/:id',
         builder: (context, state) {
           final id = int.parse(state.pathParameters['id']!);
-          return TransactionDetailScreen(transactionId: id);
+          return TransactionDetailScreen(transactionId: id, panel: Panel.agent);
         },
       ),
     ],

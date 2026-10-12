@@ -1,5 +1,8 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'auth_user.dart';
+import 'panel.dart';
+
+export 'panel.dart';
 
 part 'session.freezed.dart';
 part 'session.g.dart';
@@ -15,7 +18,7 @@ abstract class Session with _$Session {
     required AuthUser user,
   }) = _Session;
 
-  String get panel => abilities.contains('agent') ? 'agent' : 'user';
+  Panel get panel => Panel.fromAbilities(abilities);
 
   factory Session.fromJson(Map<String, dynamic> json) => _$SessionFromJson(json);
 }

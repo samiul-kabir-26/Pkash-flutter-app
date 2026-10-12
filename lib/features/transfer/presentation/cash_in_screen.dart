@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/money/money.dart';
@@ -6,11 +7,12 @@ import '../../../core/utils/validators.dart';
 import '../../../core/widgets/amount_field.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/primary_button.dart';
-import '../../../core/widgets/snackbar_helpers.dart';
+import '../../auth/presentation/session_controller.dart';
 import '../../transactions/data/transaction_repository.dart';
+import 'money_flow_outcome.dart';
 import 'money_movement_controller.dart';
-import 'receipt_screen.dart';
 
+/// §7.5: the customer names the agent by phone (typed or scanned). Free, no caps.
 class CashInScreen extends ConsumerStatefulWidget {
   const CashInScreen({super.key});
 
@@ -20,80 +22,75 @@ class CashInScreen extends ConsumerStatefulWidget {
 
 class _CashInScreenState extends ConsumerState<CashInScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _agentIdController = TextEditingController();
+  final _agentPhoneController = TextEditingController();
   final _amountController = TextEditingController();
   final _descController = TextEditingController();
 
   @override
   void dispose() {
-    _agentIdController.dispose();
+    _agentPhoneController.dispose();
     _amountController.dispose();
     _descController.dispose();
     super.dispose();
   }
 
   Future<void> _scanQr() async {
-    final scannedId = await context.push<String>('/scan-qr?type=agent');
-    if (scannedId != null && mounted) {
-      _agentIdController.text = scannedId;
+    final scannedPhone = await context.push<String>('/scan-qr?type=agent');
+    if (scannedPhone != null && mounted) {
+      _agentPhoneController.text = scannedPhone;
     }
   }
 
-  void _onReview() {
+  Future<void> _onReview() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final agentId = int.parse(_agentIdController.text.trim());
+    final agentPhone = _agentPhoneController.text.trim();
     final amount = parseMoney(_amountController.text.trim());
     final desc = _descController.text.trim();
 
     final controller = ref.read(moneyMovementControllerProvider.notifier);
-    controller.enterReview();
+    controller.enterReview(MoneyIntent(
+      type: 'CASH_IN',
+      amount: amount,
+      counterparty: agentPhone,
+      description: desc,
+    ));
 
-    ConfirmSheet.show(
+    final confirmed = await ConfirmSheet.show(
       context,
       title: 'Review Cash-In',
       items: [
-        ConfirmSheetItem(label: 'Agent ID', value: '#$agentId'),
+        ConfirmSheetItem(label: 'Agent phone', value: agentPhone),
         ConfirmSheetItem(label: 'Cash-In Amount', value: formatBdt(amount), isHighlight: true),
         const ConfirmSheetItem(label: 'Fee', value: '৳0.00 (Free)'),
         if (desc.isNotEmpty) ConfirmSheetItem(label: 'Note', value: desc),
       ],
       confirmLabel: 'Confirm Cash-In',
-      onConfirmed: () async {
+      onConfirmed: () {
         final repo = ref.read(transactionRepositoryProvider);
-        await controller.submit((idempotencyKey) {
+        return controller.submit((idempotencyKey) {
           return repo.cashIn(
-            agentId: agentId,
+            agentPhone: agentPhone,
             amount: amount,
             idempotencyKey: idempotencyKey,
             description: desc.isNotEmpty ? desc : null,
           );
         });
-
-        final state = ref.read(moneyMovementControllerProvider);
-        if (state.stage == MoneyFlowStage.success && state.transaction != null) {
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => ReceiptScreen(transaction: state.transaction!),
-              ),
-            );
-          }
-        } else if (state.stage == MoneyFlowStage.unknownOutcome) {
-          if (mounted) {
-            showErrorSnackBar(context, state.errorMessage ?? 'Status unknown. Check history.');
-          }
-        } else if (state.stage == MoneyFlowStage.failed) {
-          if (mounted) {
-            showErrorSnackBar(context, state.errorMessage ?? 'Cash-in failed.');
-          }
-        }
       },
     );
+
+    if (!mounted) return;
+    if (confirmed != true) {
+      controller.backToForm();
+      return;
+    }
+    await showMoneyFlowOutcome(context, ref, historyRoute: '/user/history', homeRoute: '/user/home');
   }
 
   @override
   Widget build(BuildContext context) {
+    final ownPhone = ref.watch(sessionControllerProvider).value?.user.phoneNumber;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cash-In from Agent'),
@@ -114,11 +111,17 @@ class _CashInScreenState extends ConsumerState<CashInScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 TextFormField(
-                  controller: _agentIdController,
-                  keyboardType: TextInputType.number,
+                  controller: _agentPhoneController,
+                  keyboardType: TextInputType.phone,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(11),
+                  ],
                   decoration: InputDecoration(
-                    labelText: 'Agent ID',
-                    hintText: 'Enter agent ID or scan QR',
+                    labelText: 'Agent phone number',
+                    hintText: 'Enter agent phone or scan QR',
                     prefixIcon: const Icon(Icons.storefront_outlined),
                     suffixIcon: IconButton(
                       icon: const Icon(Icons.qr_code_scanner),
@@ -126,7 +129,7 @@ class _CashInScreenState extends ConsumerState<CashInScreen> {
                     ),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  validator: (val) => Validators.validateId(val, fieldName: 'Agent ID'),
+                  validator: (val) => Validators.validateAgentPhone(val, ownPhone: ownPhone),
                 ),
                 const SizedBox(height: 16),
                 AmountField(

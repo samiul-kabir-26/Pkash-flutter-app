@@ -24,6 +24,15 @@ void main() async {
   print('   ✓ User logged in: ${userSession.user.name} (ID: ${userSession.user.id})');
   print('   ✓ Token abilities: ${userSession.abilities}');
 
+  // 1b. Session check (§6.3)
+  print('1b. Testing Session Check (/auth/me)...');
+  final meRes = await dio.get(
+    '/auth/me',
+    options: Options(headers: {'Authorization': 'Bearer ${userSession.token}'}),
+  );
+  assert(meRes.statusCode == 200 && meRes.data['data']['token'] == null);
+  print('   ✓ /auth/me abilities: ${meRes.data['data']['abilities']}');
+
   // 2. Fetch Wallet with Token
   print('2. Testing Wallet Fetch (/wallets/me)...');
   final walletRes = await dio.get(
@@ -32,7 +41,8 @@ void main() async {
   );
   assert(walletRes.statusCode == 200);
   final wallet = Wallet.fromJson(walletRes.data['data']['wallet'] as Map<String, dynamic>);
-  print('   ✓ Wallet fetched: ${wallet.balance} ${wallet.currency}, blocked: ${wallet.isBlocked}');
+  assert(wallet.kind == 'USER');
+  print('   ✓ Wallet fetched: ${wallet.kind} ${wallet.balance} ${wallet.currency}, blocked: ${wallet.isBlocked}');
 
   // 3. Fetch User Profile + Caps
   print('3. Testing User Profile (/users/${userSession.user.id})...');
@@ -81,6 +91,20 @@ void main() async {
   assert(agentProfRes.statusCode == 200);
   final agentData = agentProfRes.data['data']['user'];
   print('   ✓ Agent status: ${agentData['agent_info']['status']}, commission: ${agentData['agent_info']['total_commission']}');
+
+  // 7. Agent token sees the AGENT wallet (one wallet per role)
+  print('7. Testing Agent Wallet (/wallets/me with agent token)...');
+  final agentWalletRes = await dio.get(
+    '/wallets/me',
+    options: Options(headers: {'Authorization': 'Bearer ${agentSession.token}'}),
+  );
+  final agentWallet = Wallet.fromJson(agentWalletRes.data['data']['wallet'] as Map<String, dynamic>);
+  assert(agentWallet.kind == 'AGENT');
+  print('   ✓ Agent wallet: ${agentWallet.kind} ${agentWallet.balance}');
+
+  for (final token in [userSession.token, agentSession.token]) {
+    await dio.post('/auth/logout', options: Options(headers: {'Authorization': 'Bearer $token'}));
+  }
 
   print('=== ALL LIVE BACKEND CHECKS PASSED SUCCESSFULLY ===');
 }

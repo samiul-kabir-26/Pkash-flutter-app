@@ -6,12 +6,11 @@ import '../../../core/utils/validators.dart';
 import '../../../core/widgets/amount_field.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/primary_button.dart';
-import '../../../core/widgets/snackbar_helpers.dart';
 import '../../auth/presentation/session_controller.dart';
 import '../../transactions/data/transaction_repository.dart';
 import '../../wallet/presentation/wallet_providers.dart';
+import 'money_flow_outcome.dart';
 import 'money_movement_controller.dart';
-import 'receipt_screen.dart';
 
 class SendMoneyScreen extends ConsumerStatefulWidget {
   const SendMoneyScreen({super.key});
@@ -41,26 +40,24 @@ class _SendMoneyScreenState extends ConsumerState<SendMoneyScreen> {
     }
   }
 
-  void _onReview() {
+  Future<void> _onReview() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final session = ref.read(sessionControllerProvider).value;
-    final myId = session?.user.id ?? 0;
     final recipientId = int.parse(_recipientIdController.text.trim());
-
-    // Self-transfer guard
-    if (recipientId == myId) {
-      showErrorSnackBar(context, 'You cannot send money to yourself.');
-      return;
-    }
 
     final amount = parseMoney(_amountController.text.trim());
     final desc = _descController.text.trim();
 
     final controller = ref.read(moneyMovementControllerProvider.notifier);
-    controller.enterReview();
 
-    ConfirmSheet.show(
+    controller.enterReview(MoneyIntent(
+      type: 'TRANSFER',
+      amount: amount,
+      counterparty: '$recipientId',
+      description: desc,
+    ));
+
+    final confirmed = await ConfirmSheet.show(
       context,
       title: 'Review Transfer',
       items: [
@@ -69,9 +66,9 @@ class _SendMoneyScreenState extends ConsumerState<SendMoneyScreen> {
         if (desc.isNotEmpty) ConfirmSheetItem(label: 'Note', value: desc),
       ],
       confirmLabel: 'Confirm & Send',
-      onConfirmed: () async {
+      onConfirmed: () {
         final repo = ref.read(transactionRepositoryProvider);
-        await controller.submit((idempotencyKey) {
+        return controller.submit((idempotencyKey) {
           return repo.transfer(
             recipientId: recipientId,
             amount: amount,
@@ -79,32 +76,21 @@ class _SendMoneyScreenState extends ConsumerState<SendMoneyScreen> {
             description: desc.isNotEmpty ? desc : null,
           );
         });
-
-        final state = ref.read(moneyMovementControllerProvider);
-        if (state.stage == MoneyFlowStage.success && state.transaction != null) {
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => ReceiptScreen(transaction: state.transaction!),
-              ),
-            );
-          }
-        } else if (state.stage == MoneyFlowStage.unknownOutcome) {
-          if (mounted) {
-            showErrorSnackBar(context, state.errorMessage ?? 'Status unknown. Check history.');
-          }
-        } else if (state.stage == MoneyFlowStage.failed) {
-          if (mounted) {
-            showErrorSnackBar(context, state.errorMessage ?? 'Transfer failed.');
-          }
-        }
       },
     );
+
+    if (!mounted) return;
+    if (confirmed != true) {
+      controller.backToForm();
+      return;
+    }
+    await showMoneyFlowOutcome(context, ref, historyRoute: '/user/history', homeRoute: '/user/home');
   }
 
   @override
   Widget build(BuildContext context) {
     final wallet = ref.watch(walletProvider).value;
+    final myId = ref.watch(sessionControllerProvider).value?.user.id;
 
     return Scaffold(
       appBar: AppBar(
@@ -151,7 +137,7 @@ class _SendMoneyScreenState extends ConsumerState<SendMoneyScreen> {
                     ),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  validator: (val) => Validators.validateId(val, fieldName: 'Recipient ID'),
+                  validator: (val) => Validators.validateRecipientId(val, ownId: myId),
                 ),
                 const SizedBox(height: 16),
                 AmountField(

@@ -1,49 +1,57 @@
+import 'package:decimal/decimal.dart';
+import '../../auth/domain/panel.dart';
 import 'transaction.dart';
 
 enum TransactionDirection {
-  inbound,  // Money coming in (+ credit)
-  outbound, // Money going out (- debit)
+  credit, // Money coming in (+)
+  debit, // Money going out (-)
+  neutral, // Unknown type: no sign, never crash the list
 }
 
-TransactionDirection directionFor(Transaction tx, int myUserId) {
+/// History is already scoped to the token's wallet, so the direction only depends on
+/// the panel and the type (§7.7). Wallet IDs are hidden from non-staff and not needed.
+TransactionDirection directionFor(
+  Transaction tx, {
+  required Panel panel,
+  required int myUserId,
+}) {
   final type = tx.type.toUpperCase();
 
-  switch (type) {
-    case 'TOP_UP':
-      return TransactionDirection.inbound;
-
-    case 'TRANSFER':
-      if (tx.senderId == myUserId) {
-        return TransactionDirection.outbound;
+  switch (panel) {
+    case Panel.user:
+      switch (type) {
+        case 'TOP_UP':
+        case 'CASH_IN':
+          return TransactionDirection.credit;
+        case 'CASH_OUT':
+          return TransactionDirection.debit;
+        case 'TRANSFER':
+          return tx.senderId == myUserId ? TransactionDirection.debit : TransactionDirection.credit;
       }
-      return TransactionDirection.inbound;
-
-    case 'CASH_IN':
-      // For agent (whose wallet is deducted to give cash to user): outbound
-      if (tx.agentId == myUserId && tx.initiatedBy != myUserId) {
-        return TransactionDirection.outbound;
+    case Panel.agent:
+      switch (type) {
+        case 'CASH_IN':
+        case 'AGENT_WITHDRAWAL':
+          return TransactionDirection.debit;
+        case 'CASH_OUT':
+        case 'COMMISSION_PAYOUT':
+          return TransactionDirection.credit;
       }
-      // For user: inbound (wallet credited)
-      return TransactionDirection.inbound;
-
-    case 'CASH_OUT':
-      // For user: outbound (wallet debited)
-      if (tx.senderId == myUserId || (tx.userId == myUserId && tx.agentId != myUserId)) {
-        return TransactionDirection.outbound;
-      }
-      // For agent: inbound (agent receives money)
-      return TransactionDirection.inbound;
-
-    case 'AGENT_WITHDRAWAL':
-      return TransactionDirection.outbound;
-
-    case 'COMMISSION_PAYOUT':
-      return TransactionDirection.inbound;
-
-    default:
-      if (tx.senderId == myUserId) {
-        return TransactionDirection.outbound;
-      }
-      return TransactionDirection.inbound;
   }
+  return TransactionDirection.neutral;
 }
+
+/// The amount that actually moved on the viewer's wallet. A customer's cash-out debits
+/// `amount + system_fee_amount`; the agent's side of it is credited `amount` only.
+Decimal walletAmountFor(Transaction tx, {required Panel panel}) {
+  if (panel == Panel.user && tx.type.toUpperCase() == 'CASH_OUT') {
+    return tx.amount + tx.fee;
+  }
+  return tx.amount;
+}
+
+String signFor(TransactionDirection direction) => switch (direction) {
+      TransactionDirection.credit => '+',
+      TransactionDirection.debit => '-',
+      TransactionDirection.neutral => '',
+    };

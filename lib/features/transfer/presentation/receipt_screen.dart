@@ -7,10 +7,17 @@ import '../../transactions/domain/transaction.dart';
 
 class ReceiptScreen extends StatelessWidget {
   final Transaction transaction;
+  final String homeRoute;
+
+  /// The server returned a different transaction than the one submitted (G7). The receipt
+  /// always shows what the server returned, never the submitted values.
+  final bool mismatch;
 
   const ReceiptScreen({
     super.key,
     required this.transaction,
+    this.homeRoute = '/user/home',
+    this.mismatch = false,
   });
 
   @override
@@ -24,7 +31,7 @@ class ReceiptScreen extends StatelessWidget {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        context.go('/user/home');
+        context.go(homeRoute);
       },
       child: Scaffold(
         appBar: AppBar(
@@ -67,6 +74,14 @@ class ReceiptScreen extends StatelessWidget {
                     color: theme.colorScheme.primary,
                   ),
                 ),
+                if (mismatch) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'This receipt does not match what you submitted. Check your history before trying again.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.orange.shade900),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Card(
                   elevation: 0,
@@ -79,25 +94,20 @@ class ReceiptScreen extends StatelessWidget {
                         _buildReceiptRow('Transaction ID', '#${transaction.id}'),
                         _buildReceiptRow('Type', transaction.type.replaceAll('_', ' ')),
                         _buildReceiptRow('Date & Time', dateStr),
-                        if (transaction.recipientId != null)
+                        if (transaction.type == 'TRANSFER' && transaction.recipientId != null)
                           _buildReceiptRow('Recipient ID', '${transaction.recipientId}'),
-                        if (transaction.agentId != null)
-                          _buildReceiptRow('Agent ID', '${transaction.agentId}'),
-                        if (transaction.fee > Decimal.zero)
-                          _buildReceiptRow('System Fee', formatBdt(transaction.fee)),
-                        if (transaction.commission > Decimal.zero)
-                          _buildReceiptRow('Commission', formatBdt(transaction.commission)),
-                        if (transaction.senderWalletBalanceAfter != null)
+                        if (transaction.fee > Decimal.zero) ...[
+                          _buildReceiptRow('Fee', formatBdt(transaction.fee)),
+                          if (transaction.type == 'CASH_OUT')
+                            _buildReceiptRow(
+                              'Total debited',
+                              formatBdt(transaction.amount + transaction.fee),
+                            ),
+                        ],
+                        if (transaction.myBalanceAfter != null)
                           _buildReceiptRow(
-                            'New Balance',
-                            formatBdt(transaction.senderWalletBalanceAfter!),
-                            isHighlight: true,
-                          ),
-                        if (transaction.recipientWalletBalanceAfter != null &&
-                            transaction.senderWalletBalanceAfter == null)
-                          _buildReceiptRow(
-                            'New Balance',
-                            formatBdt(transaction.recipientWalletBalanceAfter!),
+                            'Your balance after',
+                            formatBdt(transaction.myBalanceAfter!),
                             isHighlight: true,
                           ),
                         if (transaction.description != null && transaction.description!.isNotEmpty)
@@ -109,7 +119,7 @@ class ReceiptScreen extends StatelessWidget {
                 const SizedBox(height: 32),
                 FilledButton.icon(
                   onPressed: () {
-                    context.go('/user/home');
+                    context.go(homeRoute);
                   },
                   icon: const Icon(Icons.home),
                   label: const Text('Back to Home'),

@@ -20,6 +20,17 @@ class UnauthenticatedEventNotifier extends Notifier<int> {
 final unauthenticatedEventProvider =
     NotifierProvider<UnauthenticatedEventNotifier, int>(UnauthenticatedEventNotifier.new);
 
+/// Set when any call returns 403 "You must change your password before proceeding." (§6.7).
+class PasswordChangeRequiredNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool value) => state = value;
+}
+
+final passwordChangeRequiredProvider =
+    NotifierProvider<PasswordChangeRequiredNotifier, bool>(PasswordChangeRequiredNotifier.new);
+
 final dioProvider = Provider<Dio>((ref) {
   final storage = ref.watch(secureTokenStorageProvider);
 
@@ -39,6 +50,9 @@ final dioProvider = Provider<Dio>((ref) {
     ErrorInterceptor(
       onUnauthorized: () {
         ref.read(unauthenticatedEventProvider.notifier).trigger();
+      },
+      onPasswordChangeRequired: () {
+        ref.read(passwordChangeRequiredProvider.notifier).set(true);
       },
     ),
   ]);

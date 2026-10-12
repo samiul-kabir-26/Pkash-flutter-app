@@ -4,10 +4,9 @@ import '../../../core/money/money.dart';
 import '../../../core/widgets/amount_field.dart';
 import '../../../core/widgets/confirm_sheet.dart';
 import '../../../core/widgets/primary_button.dart';
-import '../../../core/widgets/snackbar_helpers.dart';
 import '../../transactions/data/transaction_repository.dart';
+import 'money_flow_outcome.dart';
 import 'money_movement_controller.dart';
-import 'receipt_screen.dart';
 
 class TopUpScreen extends ConsumerStatefulWidget {
   const TopUpScreen({super.key});
@@ -28,61 +27,49 @@ class _TopUpScreenState extends ConsumerState<TopUpScreen> {
     super.dispose();
   }
 
-  void _onContinue() {
+  Future<void> _onContinue() async {
     if (!_formKey.currentState!.validate()) return;
 
     final controller = ref.read(moneyMovementControllerProvider.notifier);
-    controller.enterReview();
-
     final amount = parseMoney(_amountController.text.trim());
     final desc = _descController.text.trim();
 
-    ConfirmSheet.show(
+    controller.enterReview(MoneyIntent(type: 'TOP_UP', amount: amount, description: desc));
+
+    final confirmed = await ConfirmSheet.show(
       context,
-      title: 'Confirm Top-Up',
+      title: 'Confirm Demo Top-Up',
       items: [
-        ConfirmSheetItem(label: 'Service', value: 'Instant Balance Top-Up'),
+        const ConfirmSheetItem(label: 'Service', value: 'Demo top-up (no real funding source)'),
         ConfirmSheetItem(label: 'Amount', value: formatBdt(amount), isHighlight: true),
         if (desc.isNotEmpty) ConfirmSheetItem(label: 'Note', value: desc),
       ],
       confirmLabel: 'Top-Up Now',
-      onConfirmed: () async {
+      onConfirmed: () {
         final repo = ref.read(transactionRepositoryProvider);
-        await controller.submit((idempotencyKey) {
+        return controller.submit((idempotencyKey) {
           return repo.topUp(
             amount: amount,
             idempotencyKey: idempotencyKey,
             description: desc.isNotEmpty ? desc : null,
           );
         });
-
-        final state = ref.read(moneyMovementControllerProvider);
-        if (state.stage == MoneyFlowStage.success && state.transaction != null) {
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => ReceiptScreen(transaction: state.transaction!),
-              ),
-            );
-          }
-        } else if (state.stage == MoneyFlowStage.unknownOutcome) {
-          if (mounted) {
-            showErrorSnackBar(context, state.errorMessage ?? 'Status unknown. Check history.');
-          }
-        } else if (state.stage == MoneyFlowStage.failed) {
-          if (mounted) {
-            showErrorSnackBar(context, state.errorMessage ?? 'Top-up failed.');
-          }
-        }
       },
     );
+
+    if (!mounted) return;
+    if (confirmed != true) {
+      controller.backToForm();
+      return;
+    }
+    await showMoneyFlowOutcome(context, ref, historyRoute: '/user/history', homeRoute: '/user/home');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Top-Up Balance'),
+        title: const Text('Demo Top-Up'),
       ),
       body: SafeArea(
         child: Padding(
